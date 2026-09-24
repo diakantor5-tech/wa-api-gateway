@@ -1,15 +1,16 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
 const express = require('express');
+const qrcode = require('qrcode'); // Tambahkan library qrcode
 
 const app = express();
 app.use(express.json());
 
-// Inisialisasi client WhatsApp dengan LocalAuth agar sesi tersimpan
+let qrCodeData = ''; // Variabel untuk menyimpan data QR terbaru
+
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: { 
-        headless: true, // Menjalankan browser di background tanpa GUI
+        headless: true,
         args: [
             '--no-sandbox', 
             '--disable-setuid-sandbox',
@@ -23,62 +24,40 @@ const client = new Client({
 });
 
 client.on('qr', (qr) => {
-    console.log('SCAN QR CODE DI BAWAH INI:');
-    qrcode.generate(qr, { small: true });
+    // Simpan string QR code saat event muncul
+    qrCodeData = qr;
+    console.log('QR RECEIVED, silakan buka /qr di browser untuk scan.');
 });
 
 client.on('ready', () => {
-    console.log('Client WhatsApp sudah siap dan terhubung!');
+    console.log('Client WhatsApp sudah siap!');
+    qrCodeData = ''; // Hapus QR jika sudah terhubung
+});
+
+// Route baru untuk menampilkan QR code dalam bentuk gambar asli di browser
+app.get('/qr', async (req, res) => {
+    if (!qrCodeData) {
+        return res.send('<h3>WhatsApp sudah terhubung atau QR belum digenerate. Cek ulang log server.</h3>');
+    }
+    try {
+        // Render QR code sebagai gambar PNG di browser
+        const imageUrl = await qrcode.toDataURL(qrCodeData);
+        res.send(`<div style="text-align:center; margin-top:50px;">
+            <h2>Scan QR Code WhatsApp</h2>
+            <img src="${imageUrl}" alt="QR Code" style="width:300px; height:300px;" />
+        </div>`);
+    } catch (err) {
+        res.status(500).send('Gagal generate QR code.');
+    }
+});
+
+// Endpoint kirim pesan Anda yang sudah ada...
+app.post('/send-message', async (req, res) => {
+    // ... logika kirim pesan ...
 });
 
 client.initialize();
 
-// Endpoint API untuk mengirim pesan
-app.post('/send-message', async (req, res) => {
-    const { phone, message } = req.body;
-
-    try {
-        // Format nomor WhatsApp (contoh: 628123456789@c.us)
-        const chatId = `${phone}@c.us`;
-        
-        await client.sendMessage(chatId, message);
-
-        res.status(200).json({
-            status: true,
-            response: 'Pesan berhasil dikirim!'
-        });
-    } catch (error) {
-        res.status(500).json({
-            status: false,
-            response: 'Gagal mengirim pesan',
-            error: error.message
-        });
-    }
-});
-
-// Endpoint untuk menampilkan info Thunder Client
-app.get('/thunder-info', (req, res) => {
-    res.status(200).json({
-        "message": "Welcome to Thunder Client",
-        "about": "Lightweight Rest API Client for VSCode",
-        "createdBy": "Ranga Vadhineni",
-        "launched": 2021,
-        "features": {
-            "git": "Save data to Git Workspace",
-            "themes": "Supports VSCode Themes",
-            "data": "Collections & Environment Variables",
-            "testing": "Scriptless Testing",
-            "local": "Local Storage & Works Offline"
-        },
-        "supports": {
-            "graphql": true,
-            "codeSnippet": true,
-            "requestChaining": true,
-            "scripting": true
-        }
-    });
-});
-
 app.listen(3000, () => {
-    console.log('Server API berjalan di http://localhost:3000');
+    console.log('Server berjalan di port 3000');
 });
