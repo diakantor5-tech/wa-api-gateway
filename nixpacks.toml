@@ -1,0 +1,25 @@
+[phases.setup]
+nixPkgs = [
+  "nodejs",
+  "gconf",
+  "libx11",
+  "libxcomposite",
+  "libxcursor",
+  "libxdamage",
+  "libxext",
+  "libxfixes",
+  "libxi",
+  "libxrandr",
+  "libxrender",
+  "libxtst",
+  "nss",
+  "atk",
+  "cups",
+  "dbus",
+  "libdrm",
+  "libgbm",
+  "pango",
+  "alsa-lib",
+  "glib",
+  "nspr"
+]
