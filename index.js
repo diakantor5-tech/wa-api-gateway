@@ -1,11 +1,12 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const express = require('express');
-const qrcode = require('qrcode'); // Tambahkan library qrcode
+const qrcode = require('qrcode');
 
 const app = express();
 app.use(express.json());
 
-let qrCodeData = ''; // Variabel untuk menyimpan data QR terbaru
+let qrCodeData = '';
+let clientStatus = 'Initializing...';
 
 const client = new Client({
     authStrategy: new LocalAuth(),
@@ -23,59 +24,88 @@ const client = new Client({
     }
 });
 
+// Event saat QR Code digenerate
 client.on('qr', (qr) => {
-    // Simpan string QR code saat event muncul
     qrCodeData = qr;
-    console.log('QR RECEIVED, silakan buka /qr di browser untuk scan.');
+    clientStatus = 'Waiting for QR scan...';
+    console.log('QR RECEIVED, silakan buka /qr di browser untuk scan ulang.');
 });
 
+// Event saat berhasil terhubung
 client.on('ready', () => {
-    console.log('Client WhatsApp sudah siap!');
-    qrCodeData = ''; // Hapus QR jika sudah terhubung
+    qrCodeData = '';
+    clientStatus = 'Connected';
+    console.log('Client WhatsApp sudah siap dan terhubung!');
 });
 
-// Route baru untuk menampilkan QR code dalam bentuk gambar asli di browser
+// Event jika autentikasi gagal / sesi rusak
+client.on('auth_failure', (msg) => {
+    clientStatus = 'Auth Failure: ' + msg;
+    console.error('Autentikasi gagal:', msg);
+});
+
+// Event jika terputus (logout / koneksi terputus)
+client.on('disconnected', (reason) => {
+    clientStatus = 'Disconnected: ' + reason;
+    console.log('WhatsApp terputus, alasan:', reason);
+    
+    // Hancurkan client yang lama lalu cobainisialisasi ulang
+    client.destroy().then(() => {
+        console.log('Memulai ulang client WhatsApp...');
+        client.initialize().catch(err => console.log('Gagal re-inisialisasi:', err));
+    });
+});
+
+// Endpoint untuk menampilkan QR code di browser secara rapi
 app.get('/qr', async (req, res) => {
     if (!qrCodeData) {
-        return res.send('<h3>WhatsApp sudah terhubung atau QR belum digenerate. Cek ulang log server.</h3>');
+        return res.send(`
+            <div style="text-align:center; margin-top:50px; font-family:sans-serif;">
+                <h2>Status WhatsApp: ${clientStatus}</h2>
+                <p>WhatsApp kemungkinan sudah terhubung atau sedang memuat ulang. Jika butuh scan baru, pastikan sesi dibersihkan.</p>
+            </div>
+        `);
     }
     try {
-        // Render QR code sebagai gambar PNG di browser
         const imageUrl = await qrcode.toDataURL(qrCodeData);
-        res.send(`<div style="text-align:center; margin-top:50px;">
-            <h2>Scan QR Code WhatsApp</h2>
-            <img src="${imageUrl}" alt="QR Code" style="width:300px; height:300px;" />
-        </div>`);
+        res.send(`
+            <div style="text-align:center; margin-top:50px; font-family:sans-serif;">
+                <h2>Scan QR Code WhatsApp</h2>
+                <p>Status: ${clientStatus}</p>
+                <img src="${imageUrl}" alt="QR Code" style="width:300px; height:300px;" />
+            </div>
+        `);
     } catch (err) {
         res.status(500).send('Gagal generate QR code.');
     }
 });
 
-// Endpoint kirim pesan Anda yang sudah ada...
+// Endpoint untuk mengirim pesan
 app.post('/send-message', async (req, res) => {
     const { phone, message } = req.body;
 
-    try {
-        // Format nomor WhatsApp (contoh: 628123456789@c.us)
-        const chatId = `${phone}@c.us`;
-        
-        await client.sendMessage(chatId, message);
+    if (!phone || !message) {
+        return res.status(400).json({ status: false, response: 'Nomor dan pesan wajib diisi!' });
+    }
 
-        res.status(200).json({
-            status: true,
-            response: 'Pesan berhasil dikirim!'
-        });
+    // Format nomor (pastikan berakhiran @c.us)
+    const formattedPhone = phone.includes('@c.us') ? phone : `${phone}@c.us`;
+
+    try {
+        await client.sendMessage(formattedPhone, message);
+        return res.status(200).json({ status: true, response: 'Pesan berhasil dikirim!' });
     } catch (error) {
-        res.status(500).json({
-            status: false,
-            response: 'Gagal mengirim pesan',
-            error: error.message
-        });
+        console.error('Gagal kirim pesan:', error);
+        return res.status(500).json({ status: false, response: 'Gagal mengirim pesan. Pastikan WA terhubung.' });
     }
 });
 
-client.initialize();
+// Jalankan inisialisasi client dengan penanganan error agar tidak crash total
+client.initialize().catch(err => {
+    console.error('Error saat inisialisasi awal client:', err);
+});
 
-app.listen(3000, () => {
-    console.log('Server berjalan di port 3000');
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`Server API berjalan di port ${PORT}`);
 });
