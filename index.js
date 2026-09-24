@@ -53,7 +53,25 @@ app.get('/qr', async (req, res) => {
 
 // Endpoint kirim pesan Anda yang sudah ada...
 app.post('/send-message', async (req, res) => {
-    // ... logika kirim pesan ...
+    const { phone, message } = req.body;
+
+    try {
+        // Format nomor WhatsApp (contoh: 628123456789@c.us)
+        const chatId = `${phone}@c.us`;
+        
+        await client.sendMessage(chatId, message);
+
+        res.status(200).json({
+            status: true,
+            response: 'Pesan berhasil dikirim!'
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: false,
+            response: 'Gagal mengirim pesan',
+            error: error.message
+        });
+    }
 });
 
 client.initialize();
