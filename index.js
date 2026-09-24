@@ -1,4 +1,4 @@
-const { Client, LocalAuth } = require('whatsapp-web.js');
+const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const express = require('express');
 const qrcode = require('qrcode');
 
@@ -97,6 +97,32 @@ app.post('/send-message', async (req, res) => {
     } catch (error) {
         console.error('Gagal kirim pesan:', error);
         return res.status(500).json({ status: false, response: 'Gagal mengirim pesan. Pastikan WA terhubung.' });
+    }
+});
+
+// ==========================================
+// ENDPOINT BARU: Kirim Gambar / File (Media)
+// ==========================================
+app.post('/send-media', async (req, res) => {
+    const { phone, url, caption } = req.body;
+
+    if (!phone || !url) {
+        return res.status(400).json({ status: false, response: 'Nomor dan URL file/gambar wajib diisi!' });
+    }
+
+    const formattedPhone = phone.includes('@c.us') ? phone : `${phone}@c.us`;
+
+    try {
+        // Mengambil media secara otomatis dari URL publik (bisa link gambar, PDF, dll)
+        const media = await MessageMedia.fromUrl(url);
+
+        // Kirim media beserta caption (opsional)
+        await client.sendMessage(formattedPhone, media, { caption: caption || '' });
+
+        return res.status(200).json({ status: true, response: 'File/Gambar berhasil dikirim!'});
+    } catch (error) {
+        console.error('Gagal kirim media:', error);
+        return res.status(500).json({ status: false, response: 'Gagal mengirim file/gambar.' , error_detail: error.message});
     }
 });
 
